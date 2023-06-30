@@ -1,51 +1,60 @@
 const express = require("express");
-const app = express();
-const server = require("http").Server(app);
-const { v4: uuidv4 } = require("uuid");
-app.set("view engine", "ejs");
-const io = require("socket.io")(server, {
-  cors: {
-    origin: '*'
-  }
-});
 const { ExpressPeerServer } = require("peer");
-const opinions = {
+const https = require("https");
+const socketio = require("socket.io");
+const fs = require("fs");
+
+const app = express();
+
+// HTTPS server configuration
+const serverConfig = {
+  key: fs.readFileSync("private.key"),
+  cert: fs.readFileSync("certificate.crt"),
+};
+
+const server = https.createServer(serverConfig, app);
+const io = socketio(server, {
+  cors: {
+    origin: "*",
+  },
+});
+const peerServer = ExpressPeerServer(server, {
   debug: true,
-}
-
-app.use("/peerjs", ExpressPeerServer(server, opinions));
-app.use(express.static("public"));
-
-app.get("/", (req, res) => {
-  res.redirect(`/${uuidv4()}`);
 });
 
-app.get("/:room", (req, res) => {
-  res.render("room", { roomId: req.params.room });
+app.use("/peerjs", peerServer);
+
+app.get("/", (req, res, next) => {
+  res.send("Hello world!");
 });
 
-
+// When a new socket.io connection is established
 
 io.on("send", (socket) => {
-  console.log(socket)
-})
+  console.log(socket);
+});
+
 
 var allClients = [];
+
 io.on("connection", (socket) => {
-  allClients.push(socket);
-  console.log("connected")
   socket.on("join-room", (roomId, userId, userName) => {
-    console.log(roomId, userId, userName)
-    socket.join(roomId)
-   
-    setTimeout(()=>{
+    console.log(roomId, userId, userName);
+    socket.join(roomId);
+
+    setTimeout(() => {
       socket.broadcast.emit("user-connected", userId);
-      console.log("first user connected")
-    }, 1000)
+      console.log("first user connected");
+    }, 1000);
 
     socket.on("message", (message) => {
-      console.log(message)
-      io.to(roomId).emit("createMessage", message, userName, new Date().toLocaleTimeString());
+      console.log(message);
+      io.to(roomId).emit(
+        "createMessage",
+        message,
+        userName,
+        new Date().toLocaleTimeString()
+      );
     });
 
     // disconected
@@ -54,17 +63,16 @@ io.on("connection", (socket) => {
     //   console.log({roomId, userId, userName})
     //   socket.broadcast.to(roomId).emit('user_leave', userId);
     // });
-    socket.on('disconnect', function() {
-      console.log('Got disconnect!');
+    socket.on("disconnect", function () {
+      console.log("Got disconnect!");
 
       var i = allClients.indexOf(socket);
       allClients.splice(i, 1);
-      socket.broadcast.to(roomId).emit('user_leave', userId);
-   });
-
+      socket.broadcast.to(roomId).emit("user_leave", userId);
+    });
   });
 });
 
-
-
-server.listen(process.env.PORT || 3030);
+server.listen(3030, () => {
+  console.log("Server is running on https://localhost");
+});

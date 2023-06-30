@@ -1,2 +1,4 @@
 node_modules
 Blog.md
+certificate.crt
+private.key
